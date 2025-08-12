@@ -17,22 +17,45 @@ export default function App() {
   const [editing, setEditing] = useState(null)
 
   // CRUD
-  function handleSubmit(item) {
-    if (editing) {
-      const next = { ...item }
-      next.status = computeStatus(next.quantity, next.status)
-      setItems(prev => prev.map(p => p.id === editing.id
-        ? { ...next, id: editing.id, createdAt: editing.createdAt, updatedAt: Date.now() }
-        : p
-      ))
-      setEditing(null)
-    } else {
-      const id = crypto.randomUUID()
-      const next = { ...item }
-      next.status = computeStatus(next.quantity, next.status)
-      setItems(prev => [{ ...next, id, createdAt: Date.now(), updatedAt: Date.now() }, ...prev])
+function handleSubmit(item) {
+  // Normalize for case-insensitive comparison
+  const nameLower = item.name.trim().toLowerCase();
+  const skuLower = item.sku.trim().toLowerCase();
+
+  if (editing) {
+    // Check duplicates excluding the item being edited
+    const duplicate = items.some(p => 
+      p.id !== editing.id && 
+      (p.name.trim().toLowerCase() === nameLower || p.sku.trim().toLowerCase() === skuLower)
+    );
+
+    if (duplicate) {
+      alert("❌ An item with the same name or SKU already exists.");
+      return;
     }
+
+    setItems(prev => prev.map(p => p.id === editing.id
+      ? { ...item, id: editing.id, createdAt: editing.createdAt, updatedAt: Date.now() }
+      : p
+    ));
+    setEditing(null);
+
+  } else {
+    // Check duplicates for new items
+    const duplicate = items.some(p => 
+      p.name.trim().toLowerCase() === nameLower || p.sku.trim().toLowerCase() === skuLower
+    );
+
+    if (duplicate) {
+      alert("❌ An item with the same name or SKU already exists.");
+      return;
+    }
+
+    const id = crypto.randomUUID();
+    setItems(prev => [{ ...item, id, createdAt: Date.now(), updatedAt: Date.now() }, ...prev]);
   }
+}
+
   function handleDelete(id) {
     setItems(prev => prev.filter(p => p.id !== id))
     if (editing?.id === id) setEditing(null)
