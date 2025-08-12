@@ -5,19 +5,39 @@ It includes full **CRUD operations**, **search / filter / sort**, **localStorage
 
 ---
 
+## 🔗 Demo
+
+- **Live:** https://inventory-system-omega-seven.vercel.app/
+- **GitHub:** https://github.com/alighader16/Inventory_System.git
+
+---
+
 ## 🚀 Features
 
 - **CRUD UI** — Add, edit, delete items (name, SKU, category, price, quantity)
-- **Search / Filter / Sort** — Search by name/SKU, filter by category, sort by name/price/qty/created
-- **Persistent Storage** — Data saved in **localStorage** (survives page refresh)
-- **Fancy UI** — Clean glassmorphism, gradients, subtle animations (pure Tailwind)
-- **Stats** — Item count, total quantity, total inventory value
+- **Search / Filter / Sort**
+  - Search by **name/SKU**
+  - Filter by **category** and **status** (In Stock, Low Stock, Ordered, Discounted)
+  - Sort by **name / price / quantity / created (newest/oldest)**
+- **Status Tracking**
+  - Automatic: `Low Stock` if quantity `< 5`, otherwise `In Stock`
+  - Manual: change status to `Ordered` or `Discounted` from the item row
+- **Duplicate Protection**
+  - **Add** is blocked if **name** or **SKU** already exists (case-insensitive)
+  - **Update** is blocked if trying to change **name/SKU** to an existing one
+- **Warnings**
+  - Chatbot shows a **⚠️ Low stock warning** when adding items with quantity `< 5`
+- **Persistent Storage**
+  - Data saved in **localStorage** (survives page refresh)
+- **Fancy UI**
+  - Clean glassmorphism, gradients, subtle animations (pure Tailwind)
+  - Chatbot **minimize / maximize**
+- **Stats**
+  - Item count, total quantity, total inventory value
 - **Deterministic Offline Chatbot**
-  - Friendly, helpful replies (no random canned stuff)
+  - Friendly, helpful replies (no external APIs, works offline)
   - **Understands your inventory** (reads current items)
-  - **Chat-based CRUD**: `add item …`, `update item …`, `delete item …`
-  - **Queries**: most expensive, total value, low stock (<X), list by category, list all items
-  - **Zero APIs / Zero keys** — safe for exams/demos
+  - **Chat-based CRUD** and analytics
 
 ---
 
@@ -33,8 +53,8 @@ It includes full **CRUD operations**, **search / filter / sort**, **localStorage
 # 📦 Installation & Setup
 
 ```bash
-git clone https://github.com/yourusername/inventory-app.git
-cd inventory-app
+git clone https://github.com/alighader16/Inventory_System.git
+cd Inventory_System
 npm install
 npm run dev
 ```
@@ -52,24 +72,40 @@ npm run dev
 
 ## Inventory Q&A
 
-- **Most expensive item:** `most expensive`
-- **Totals:** `total value`, `total items`
+- **Most expensive item:**  
+  `most expensive`
+- **Totals:**  
+  `total value`, `total items`
 - **Low stock:**
-  - Default: `low stock` (threshold `< 5`)
-  - Custom: `low stock less than 3`, `below 2`, `under 4`
-- **By category:** `items with electronics category`
-- **List everything:** `list all items`, `show inventory`
-- **Availability / search:**
+  - Default:  
+    `low stock` (threshold `< 5`)
+  - Custom:  
+    `low stock less than 3`, `below 2`, `under 4`
+- **By category:**  
+  `items with electronics category`
+- **List everything:**  
+  `list all items`, `show inventory`
+- **Availability / search** _(case-insensitive, matches name or SKU)_:
   - `do we have iphone 15 in stock?`
   - `is macbook available?`
-  - `find samsung`
+  - `find samsung`  
+    _(Returns category, price, quantity, status, SKU)_
 
 ## Chat-based CRUD (affects real UI immediately)
 
 - **Add**
+
   - `add item iPhone 15 category electronics price 1200 qty 5 sku IP15`
+  - **Duplicate check:** Prevents adding if **item name** or **SKU** already exists (case-insensitive).
+  - **Low stock warning:** Alerts if added quantity is below 5 and sets status to `Low Stock`.
+
 - **Update** _(only mentioned fields change)_
+
   - `update item iPhone 15 qty 8 price 1100`
   - `update item iPhone 15 category phones sku IP15-2025`
+  - **Existence check:** Prevents updating non-existing items.
+  - **Low stock warning:** If updated quantity falls below 5, status changes to `Low Stock`.
+
 - **Delete**
   - `delete item iPhone 15`
+  - **Existence check:** Warns if trying to delete an item that does not exist.
