@@ -274,7 +274,7 @@ function getBotResponse(prompt, inventory, setItems) {
     return { reply: helpMessage(inv), suggestions: suggestNext(inv) };
   }
 
-// ADD ITEM
+// ADD ITEM (with duplicate name/SKU checks + low stock warning)
 if (q.startsWith("add item")) {
   const newItem = parseAddCommand(prompt);
   if (!newItem.name || !newItem.category || isNaN(newItem.price) || isNaN(newItem.quantity)) {
@@ -285,12 +285,22 @@ if (q.startsWith("add item")) {
     };
   }
 
-  // Determine status
-  let status = "In Stock";
-  if (Number(newItem.quantity) < 5) {
-    status = "Low Stock";
+  // DUPLICATE CHECKS
+  const nameDup = findByName(inventory, newItem.name);
+  const skuDup = newItem.sku ? findBySku(inventory, newItem.sku) : null;
+  if (nameDup || skuDup) {
+    return {
+      reply:
+        "❌ Duplicate item.\n" +
+        (nameDup ? `• Name "${newItem.name}" already exists.\n` : "") +
+        (skuDup ? `• SKU "${newItem.sku}" already exists (belongs to "${skuDup.name}").\n` : "") +
+        `\nUse \`update item ${nameDup ? newItem.name : (skuDup ? skuDup.name : "<name>")} ...\` instead.`,
+      suggestions: ["list all items", `update item ${nameDup ? newItem.name : (skuDup ? skuDup.name : "<name>")} qty ... price ...`],
+    };
   }
 
+  // Status + persist
+  const status = Number(newItem.quantity) < 5 ? "Low Stock" : "In Stock";
   const itemWithId = {
     ...newItem,
     status,
@@ -298,60 +308,83 @@ if (q.startsWith("add item")) {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
+  setItems(prev => [itemWithId, ...prev]);
 
-  setItems((prev) => [itemWithId, ...prev]);
+  let replyMsg =
+    `✅ Added **${itemWithId.name}**.\n` +
+    `• Category: ${itemWithId.category}\n` +
+    `• Price: 💲${num(itemWithId.price)}\n` +
+    `• Qty: ${num(itemWithId.quantity)}\n` +
+    `• Status: ${status}` +
+    (itemWithId.sku ? `\n• SKU: ${itemWithId.sku}` : "");
+  if (status === "Low Stock") replyMsg += `\n⚠️ **Warning**: This item is low on stock!`;
+  replyMsg += `\n\n💡 Tip: \`list all items\``;
 
-  // Build reply with warning if low stock
-  let replyMsg = `✅ Added **${itemWithId.name}** to your inventory.\n• Category: ${itemWithId.category}\n• Price: 💲${num(itemWithId.price)}\n• Qty: ${num(itemWithId.quantity)}\n• Status: ${status}`;
-  if (status === "Low Stock") {
-    replyMsg += `\n⚠️ **Warning**: This item is low on stock!`;
-  }
-  if (itemWithId.sku) {
-    replyMsg += `\n• SKU: ${itemWithId.sku}`;
-  }
-  replyMsg += `\n\n💡 Tip: Type \`list all items\` to confirm.`;
-
-  return {
-    reply: replyMsg,
-    suggestions: ["list all items", "most expensive", "low stock", "update item ...", "delete item ..."],
-  };
+  return { reply: replyMsg, suggestions: ["list all items", "low stock", "most expensive"] };
 }
 
-
-  // ---------- UPDATE ITEM ----------
-  if (q.startsWith("update item")) {
-    const updates = parseUpdateCommand(prompt);
-    if (!updates.name) {
-      return {
-        reply:
-          "❌ Invalid syntax.\nUse:\n`update item <name> [qty <number>] [price <number>] [category <text>] [sku <text>]`\nExample:\n`update item iPhone 15 qty 8 price 1100`",
-        suggestions: ["update item iPhone 15 qty 8 price 1100", "help"],
-      };
-    }
-    let found = false;
-    let updatedFieldsText = "";
-    setItems((prev) =>
-      prev.map((it) => {
-        if ((it.name || "").toLowerCase() === updates.name.toLowerCase()) {
-          found = true;
-          const next = { ...it, ...updates.fields, updatedAt: Date.now() };
-          try {
-            // eslint-disable-next-line no-undef
-            next.status = computeStatus(next.quantity, next.status || it.status);
-          } catch {}
-          updatedFieldsText = summarizeUpdates(it, next);
-          return next;
-        }
-        return it;
-      })
-    );
+// UPDATE ITEM (must exist; no duplicate name/SKU after update)
+if (q.startsWith("update item")) {
+  const updates = parseUpdateCommand(prompt);
+  if (!updates.name) {
     return {
-      reply: found
-        ? `🔄 Updated **${updates.name}**.\n${updatedFieldsText || "No visible field changes."}\n\n💡 Tip: Try \`list all items\` to verify.`
-        : `❌ Could not find an item named **${updates.name}**.\n💡 You can add it first with \`add item ...\`.`,
-      suggestions: found ? ["list all items", "total value", "low stock"] : ["add item ...", "list all items"],
+      reply:
+        "❌ Invalid syntax.\nUse:\n`update item <name> [qty <number>] [price <number>] [category <text>] [sku <text>]`\nExample:\n`update item iPhone 15 qty 8 price 1100`",
+      suggestions: ["update item iPhone 15 qty 8 price 1100", "help"],
     };
   }
+
+  // Find target by name (case-insensitive)
+  const target = findByName(inventory, updates.name);
+  if (!target) {
+    return {
+      reply: `❌ Item "**${updates.name}**" doesn’t exist. Use \`add item ...\` first or check the spelling.`,
+      suggestions: ["list all items", "add item ..."],
+    };
+  }
+
+  // Prevent renaming to an existing name (that isn't this item)
+  if (updates.fields.name && norm(updates.fields.name) !== norm(target.name)) {
+    const nameConflict = findByName(inventory, updates.fields.name);
+    if (nameConflict) {
+      return {
+        reply: `❌ Name conflict: "${updates.fields.name}" already exists (belongs to "${nameConflict.name}"). Choose a different name.`,
+        suggestions: ["list all items", `update item ${target.name} name <new unique name>`],
+      };
+    }
+  }
+
+  // Prevent changing SKU to an existing one (that isn't this item)
+  if (updates.fields.sku && norm(updates.fields.sku) !== norm(target.sku)) {
+    const skuConflict = findBySku(inventory, updates.fields.sku);
+    if (skuConflict) {
+      return {
+        reply: `❌ SKU conflict: "${updates.fields.sku}" already exists (belongs to "${skuConflict.name}"). Use a unique SKU.`,
+        suggestions: ["list all items", `update item ${target.name} sku <unique sku>`],
+      };
+    }
+  }
+
+  // Apply update
+  let updatedFieldsText = "";
+  setItems(prev =>
+    prev.map(it => {
+      if (it.id !== target.id) return it;
+      const next = { ...it, ...updates.fields, updatedAt: Date.now() };
+      // Auto status on qty change (keep Ordered/Discounted if you use those)
+      if (typeof next.quantity === "number") {
+        next.status = next.quantity < 5 ? "Low Stock" : (next.status || "In Stock");
+      }
+      updatedFieldsText = summarizeUpdates(it, next);
+      return next;
+    })
+  );
+
+  return {
+    reply: `🔄 Updated **${target.name}**.\n${updatedFieldsText || "No visible field changes."}\n\n💡 Tip: \`list all items\``,
+    suggestions: ["list all items", "total value", "low stock"],
+  };
+}
 
   // ---------- DELETE ITEM ----------
   if (q.startsWith("delete item")) {
@@ -528,6 +561,10 @@ if (q.startsWith("add item")) {
 
 
 /* --------------------- Helpers --------------------- */
+function norm(s) { return String(s || "").trim().toLowerCase(); }
+function findByName(inv, name) { const n = norm(name); return inv.find(it => norm(it.name) === n); }
+function findBySku(inv, sku) { const s = norm(sku); if (!s) return null; return inv.find(it => norm(it.sku) === s); }
+
 function findAvailability(inv, rawTerm) {
   const term = String(rawTerm || '').trim()
   if (!term) return { reply: "❌ Please specify an item name or SKU.", suggestions: ["list all items", "help"] }
