@@ -8,6 +8,7 @@ It includes full **CRUD operations**, **search / filter / sort**, **localStorage
 ## 🔗 Demo
 
 - **GitHub:** https://github.com/alighader16/Inventory_System.git
+- **Live Url:** https://inventory-system-omega-seven.vercel.app/
 
 ---
 
